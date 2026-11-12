@@ -11,6 +11,7 @@ import { burst, explosionFx, damageNumber } from './effects.js';
 import { sfx } from './audio.js';
 import { navDir } from './nav.js';
 import { attachLook, updateLook, lookShoot, lookDie } from './enemyLook.js';
+import { A } from './assets.js';
 
 const TYPE_KEYS = Object.keys(ENEMY_TYPES);
 const D = () => DIFFICULTY[G.diff] || DIFFICULTY.normal;
@@ -598,13 +599,54 @@ function updateProjectiles(dt) {
 }
 
 // ---------- 픽업 ----------
+// 외부 모델(CC0): 체력 = Quaternius 'Pickup Health', 탄약 = Poly Haven ammo_box, 보급품 = Poly Haven old_military_crate.
+// 크기를 맞춘 원형을 한 번 만들어 두고 복제한다. 모델이 없으면 예전처럼 빛나는 상자.
+const PICKUP_MODEL = { health: ['health', 0.62], ammo: ['ammo_box', 0.6], supply: ['old_military_crate', 0.95] };
+const pickupProto = {};
+function pickupModel(type) {
+  if (pickupProto[type] !== undefined) return pickupProto[type];
+  const [key, size] = PICKUP_MODEL[type] || [];
+  const g = key && A.models[key];
+  if (!g) return (pickupProto[type] = null);
+  const src = g.scene.clone(true);
+  // 군용 상자 파일에는 상자가 두 개(_a, _b) 들어 있다 — 닫힌 쪽 하나만 쓴다
+  if (key === 'old_military_crate') src.traverse(o => { if (/_b$/.test(o.name)) o.visible = false; });
+  src.updateMatrixWorld(true);
+  const box = new THREE.Box3();
+  src.traverse(o => { if (o.isMesh && o.visible && o.parent.visible) box.expandByObject(o); });
+  const sz = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
+  const s = size / Math.max(sz.x, sz.y, sz.z);
+  src.position.set(-c.x * s, -c.y * s, -c.z * s);   // 가운데를 원점에 (기존 상자와 같은 기준)
+  src.scale.setScalar(s);
+  src.traverse(o => { if (o.isMesh) { o.castShadow = true; if (o.material) o.material.envMapIntensity = 0.8; } });
+  const root = new THREE.Group(); root.add(src);
+  return (pickupProto[type] = root);
+}
+// 모델 아래의 은은한 빛 무리: 예전 빛나는 상자처럼 멀리서도 종류를 알아보게
+const haloTex = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d'), rg = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  rg.addColorStop(0, 'rgba(255,255,255,.9)'); rg.addColorStop(0.35, 'rgba(255,255,255,.35)'); rg.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = rg; g.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
+})();
 export function spawnPickup(d, broadcast = false) {
   const def = PICKUPS[d.type];
-  const mat = new THREE.MeshStandardMaterial({ color: def.color, emissive: def.color, emissiveIntensity: 1.6, roughness: 0.4 });
-  let mesh = new THREE.Mesh(pickupGeo, mat), fall = 0;
+  const proto = pickupModel(d.type);
+  let mat, mesh, fall = 0;
+  if (proto) {
+    mat = new THREE.SpriteMaterial({ map: haloTex, color: glow(def.color, 1.4), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: d.type === 'ammo' ? 0.8 : 0.55 });   // 탄약통은 어두운 색이라 조금 더 진하게
+    const halo = new THREE.Sprite(mat);
+    halo.scale.setScalar(PICKUP_MODEL[d.type][1] * 2.2);
+    mesh = new THREE.Group();
+    mesh.add(proto.clone(true), halo);
+  } else {
+    mat = new THREE.MeshStandardMaterial({ color: def.color, emissive: def.color, emissiveIntensity: 1.6, roughness: 0.4 });
+    mesh = new THREE.Mesh(pickupGeo, mat);
+  }
   if (d.type === 'supply') {
     // 보급품: 큰 상자 + 멀리서도 보이는 빛기둥, 하늘에서 떨어진다
-    mesh.scale.setScalar(2);
+    if (!proto) mesh.scale.setScalar(2);
     const beam = new THREE.Mesh(beamGeo, beamMat);
     beam.position.y = 30;
     const g = new THREE.Group();

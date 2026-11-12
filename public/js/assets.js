@@ -12,7 +12,8 @@ export const A = { models: {}, textures: {}, ready: false };
 const gltf = new GLTFLoader();
 const texLoader = new THREE.TextureLoader();
 
-const MODELS = ['rifle', 'shotgun', 'sniper', 'pistol', 'rocket', 'soldier', 'barrel/barrel.gltf'];
+const MODELS = ['rifle', 'shotgun', 'sniper', 'pistol', 'rocket', 'soldier', 'barrel/barrel.gltf',
+  'health', 'ammo_box/ammo_box.gltf', 'old_military_crate/old_military_crate.gltf'];   // 픽업: 체력 / 탄약 / 보급품
 const TEXTURES = ['floor', 'concrete', 'steel', 'corrugated', 'wood'];
 
 function loadGltf(path) {

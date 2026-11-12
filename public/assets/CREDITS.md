@@ -14,6 +14,9 @@
 | rocket.glb | Bazooka — https://poly.pizza/m/eJNzLpBsEt | CreativeTrio |
 | soldier.glb | SWAT (애니메이션 포함) — https://poly.pizza/m/Btfn3G5Xv4 | Quaternius |
 | barrel/ | barrel_03 — https://polyhaven.com/a/barrel_03 (파란 통을 빨갛게 색 변환) | Poly Haven |
+| health.glb | Pickup Health (체력 픽업) — https://poly.pizza/m/ijqVDSeIM5 | Quaternius |
+| ammo_box/ | ammo_box (탄약 픽업) — https://polyhaven.com/a/ammo_box | Poly Haven |
+| old_military_crate/ | old_military_crate (보급품, 두 상자 중 하나만 표시) — https://polyhaven.com/a/old_military_crate | Poly Haven |
 
 ## 텍스처 (`textures/`, Poly Haven 1k)
 
