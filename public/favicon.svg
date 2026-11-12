@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- FPS Arena: 모서리를 깎은 어두운 패널 + 앰버 조준선 (게임 UI와 같은 색) -->
+  <path d="M0 0H52L64 12V64H12L0 52Z" fill="#11151b"/>
+  <path d="M2 2H51L62 13V62H13L2 51Z" fill="none" stroke="#ffb224" stroke-opacity=".35" stroke-width="2"/>
+  <circle cx="32" cy="32" r="15" fill="none" stroke="#ffb224" stroke-width="5"/>
+  <path d="M32 6V19M32 45V58M6 32H19M45 32H58" stroke="#ffb224" stroke-width="5" stroke-linecap="square"/>
+  <circle cx="32" cy="32" r="4" fill="#ff4d3d"/>
+</svg>

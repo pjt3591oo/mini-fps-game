@@ -19,6 +19,8 @@ const MIME = {
   '.m4a': 'audio/mp4',
   '.hdr': 'application/octet-stream',
   '.md': 'text/markdown; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
 };
 
 // ---------- 순위표 (data/scores.json에 저장) ----------
@@ -68,7 +70,6 @@ const server = http.createServer((req, res) => {
     return;
   }
   if (url === '/') url = '/index.html';
-  if (url === '/favicon.ico') { res.writeHead(204); return res.end(); }
   const file = path.normalize(path.join(PUBLIC, url));
   if (!file.startsWith(PUBLIC)) { res.writeHead(403); return res.end(); }
   fs.readFile(file, (err, data) => {
