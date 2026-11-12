@@ -14,12 +14,13 @@ export const W = {
   current: 'rifle',
   ammo: {},
   lv: {}, pity: {},   // 무기별 강화 단계 / 실패로 쌓인 확률 보정
-  cooldown: 0,
+  cooldown: 0, frameDt: 0,
   reloading: 0,
   switching: 0, pending: null,
   ads: 0, adsHeld: false,
   firing: false, triggerFresh: false,
   recoil: 0,        // 연사 시 탄 퍼짐 누적 (0~1)
+  steady: 0,        // 특화 '호흡 정지' 대기 시간
   spreadNow: 0,     // HUD 조준선 표시용
 };
 
@@ -156,6 +157,8 @@ export function upgradeGunModels(srcModels) {
       // 원본 색이 거의 검정이라 하늘 반사만 보여 파랗게 뜬다: 색을 살짝 올리고 반사를 줄인다
       m.color.multiplyScalar(/glass/i.test(m.name) ? 1 : 2.6);
       m.envMapIntensity = 0.35;
+      // 외형 색(setGunSkin)이 바꿀 몸체 재질: 금속·유리가 아닌 것
+      if (!/metal|glass/i.test(m.name)) { m.userData.skin = true; m.userData.base = m.color.clone(); }
       if (/metal/i.test(m.name)) { m.metalness = 0.55; m.roughness = 0.42; }
       else if (/black|dark|main|grey/i.test(m.name)) { m.metalness = 0.3; m.roughness = 0.55; }
       else if (/glass/i.test(m.name)) { m.metalness = 0.9; m.roughness = 0.08; m.envMapIntensity = 1; }
@@ -172,6 +175,23 @@ export function upgradeGunModels(srcModels) {
     g.userData.muzzle.set(0, n ? sy / n : f.top - 0.03, f.front - 0.02);
   }
   setCurrent(W.current);
+}
+
+// 무기 외형 색 (보관함). perWeapon: { 무기: 물건 | 색 숫자 | null } — null이면 원래 색
+// 물건 값: color(몸체 색), metal·rough(재질), glow·glowI(발광)
+export function setGunSkin(perWeapon) {
+  for (const k in models) {
+    let v = perWeapon[k] ?? null;
+    if (typeof v === 'number') v = { color: v };
+    models[k].traverse(o => {
+      const m = o.material;
+      if (!o.isMesh || !m?.userData.skin) return;
+      if (v == null) { m.color.copy(m.userData.base); m.metalness = 0.3; m.roughness = 0.55; m.emissive.setHex(0); return; }
+      m.color.setHex(v.color).multiplyScalar(0.55);
+      m.metalness = v.metal ?? 0.4; m.roughness = v.rough ?? 0.55;
+      if (v.glow) { m.emissive.setHex(v.glow); m.emissiveIntensity = v.glowI ?? 0.35; } else m.emissive.setHex(0);
+    });
+  }
 }
 
 function setCurrent(name) {
@@ -235,7 +255,8 @@ const endPos = new THREE.Vector3(), _cd = new THREE.Vector3(), _cr = new THREE.V
 function currentSpread() {
   const def = WEAPONS[W.current];
   const hip = def.hipSpread ?? def.spread;
-  const adsMul = W.current === 'rifle' && hasFx('rifle', 5) ? def.adsSpreadMul * 0.6 : def.adsSpreadMul;
+  let adsMul = W.current === 'rifle' && hasFx('rifle', 5) ? def.adsSpreadMul * 0.6 : def.adsSpreadMul;
+  if (W.current === 'shotgun' && G.mods.slug) adsMul *= 0.6;   // 특화: 슬러그 장전
   let s = hip + (def.spread * adsMul - hip) * W.ads;
   const hs = Math.hypot(player.vel.x, player.vel.z);
   const movePen = (hs > 1 ? 0.012 * Math.min(hs / PLAYER.SPEED, 1.6) : 0) + (player.onGround ? 0 : 0.03);
@@ -247,8 +268,14 @@ function currentSpread() {
 function fire() {
   const def = WEAPONS[W.current], a = W.ammo[W.current];
   a.mag--;
-  W.cooldown = def.fireDelay / G.mods.fireRate;
+  // 연사 간격: 지난 프레임에서 남은 시간을 넘겨 준다. 그냥 다시 채우면 간격이 프레임 단위로 올림돼
+  // 60fps에서 소총이 설계보다 14% 느리게, 화면 주사율마다 다르게 쏜다 (사이클 13).
+  // 넘겨 주는 양은 한 프레임까지 — 오래 쉬었다 쏴도 한 프레임에 두 발이 나가지 않는다.
+  W.cooldown = Math.max(W.cooldown, -W.frameDt) + def.fireDelay / G.mods.fireRate;
   const spread = currentSpread();
+  // 특화 '호흡 정지': 정조준으로 1.5초 멈춰 있었으면 이번 한 발 +25%
+  const steadyShot = W.current === 'sniper' && G.mods.steady && W.steady >= 1.5;
+  W.steady = 0;
 
   camera.updateMatrixWorld();
   muzzlePos.copy(models[W.current].userData.muzzle);
@@ -298,6 +325,9 @@ function fire() {
         const head = ud.part === 'head';
         let dmg = def.dmg * levelDmg(W.current) * (head ? headMul : 1);
         if (falloff) dmg *= Math.max(0.25, 1 - h.distance / falloff * 0.75);
+        // 해금 특성 '근접 사격': 샷건·권총, 10m 안, 장수만큼 +20%씩 더한다
+        if (G.mods.close && (cur === 'shotgun' || cur === 'pistol') && h.distance < 10) dmg *= 1 + 0.2 * G.mods.close;
+        if (steadyShot) dmg *= 1.25;   // 특화: 호흡 정지
         const killed = damageEnemy(e, dmg, h.point, head);
         hitAny = true; killAny ||= killed; headAny ||= head;
         if (pierce-- > 0) continue;
@@ -323,7 +353,7 @@ function fire() {
 
   // 반동
   W.recoil = Math.min(1, W.recoil + (def.auto ? 0.22 : 0.5));
-  const adsMul = 1 - W.ads * 0.45;
+  const adsMul = (1 - W.ads * 0.45) * (W.current === 'rifle' && G.mods.recoilCut ? 0.65 : 1);   // 특화: 점사 제어
   camera.rotation.x = Math.min(camera.rotation.x + def.recoil * adsMul, Math.PI / 2 - 0.01);
   camera.rotation.y += (Math.random() - 0.5) * def.recoil * 0.6 * adsMul;
   gunKick += def.kick;
@@ -420,6 +450,12 @@ const gunTarget = new THREE.Vector3();
 export function updateWeapons(dt, sprinting) {
   const def = WEAPONS[W.current], a = W.ammo[W.current];
   W.cooldown -= dt;
+  W.frameDt = dt;
+  // 특화 '호흡 정지': 저격총 정조준 중 수평 속도 1 이하로 버틴 시간
+  const still = W.current === 'sniper' && G.mods.steady && W.ads > 0.9 && Math.hypot(player.vel.x, player.vel.z) <= 1;
+  const wasReady = W.steady >= 1.5;
+  W.steady = still ? W.steady + dt : 0;
+  if (!wasReady && W.steady >= 1.5) G.hooks.steady?.();
 
   // 무기 교체 (내렸다 올리기)
   if (W.switching > 0) {
@@ -443,7 +479,8 @@ export function updateWeapons(dt, sprinting) {
 
   // 사격
   const canAct = !player.dead && W.switching <= 0 && W.reloading <= 0;
-  if (W.firing && canAct && W.cooldown <= 0 && (def.auto || W.triggerFresh)) {
+  const auto = def.auto || (W.current === 'pistol' && G.mods.autoPistol);   // 특화: 속사 권총
+  if (W.firing && canAct && W.cooldown <= 0 && (auto || W.triggerFresh)) {
     W.triggerFresh = false;
     if (a.mag > 0) fire();
     else if (a.reserve > 0) reload();

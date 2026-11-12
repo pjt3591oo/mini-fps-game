@@ -545,7 +545,8 @@ function onEnemyKilled(info) {
   if (i >= 0) { G.enemies[i].die(); G.enemies.splice(i, 1); }
   const def = ENEMY_TYPES[info.ty];
   _kp.set(info.x, info.y + def.scale, info.z);
-  burst(_kp, def.color, def.boss ? 60 : 18, def.boss ? 10 : 5, 0.8);
+  // 보관함 '처치 연출': 내가 처치했을 때 내 화면에서만 파편 색을 바꾼다
+  burst(_kp, info.by === net.id && G.killFx != null ? G.killFx : def.color, def.boss ? 60 : 18, def.boss ? 10 : 5, 0.8);
   if (def.boss) { explosionFx(_kp, 5); sfx.explosion(0.8); }
   const mine = info.by === net.id;
   if (mine) {
@@ -826,6 +827,7 @@ function startWave(n) {
 }
 function onWaveStart(info) {
   G.wave = info.n;
+  G.inWave = true;   // 보급 드롭 판정: 웨이브 진행 중에만
   G.mut = MUTATORS[info.mut] || null;
   resetBarrels();
   sfx.wave();
@@ -834,6 +836,7 @@ function onWaveStart(info) {
 }
 function onWaveClear(info) {
   G.mut = null;
+  G.inWave = false;
   sfx.waveClear();
   G.hooks.waveClear?.(info);
 }
@@ -979,7 +982,10 @@ net.on('strike', (msg) => addStrike({ ...msg, t: msg.d }));
 net.on('pk', (d) => { spawnPickup(d); nextPickupId = Math.max(nextPickupId, d.id + 1); });
 net.on('pkt', (msg) => {
   const i = G.pickups.findIndex(p => p.id === msg.id);
-  if (i >= 0) removePickup(i);
+  if (i >= 0) {
+    if (G.pickups[i].type === 'supply') G.hooks.supplyPickOther?.();   // 협동: 동료가 주운 보급품도 각자 드롭을 굴린다
+    removePickup(i);
+  }
 });
 net.on('boom', (msg) => boomLocal(msg, msg.r, msg.pd, msg.src));
 net.on('bx', (msg) => { const b = world.barrels[msg.id]; if (b) removeBarrel(b); });

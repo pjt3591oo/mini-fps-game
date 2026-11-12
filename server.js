@@ -107,13 +107,15 @@ wss.on('connection', (ws) => {
       roomName = String(msg.room || 'default').slice(0, 32);
       room = getRoom(roomName);
       const name = String(msg.name || `Player${id}`).slice(0, 16);
-      room.clients.set(id, { ws, name });
+      // 칭호는 물건 id만 받는다 (글자를 그대로 넘기지 않음). 받는 쪽이 아는 칭호 id일 때만 표시한다
+      const title = typeof msg.title === 'string' && /^[a-z0-9-]{1,24}$/.test(msg.title) ? msg.title : null;
+      room.clients.set(id, { ws, name, title });
       if (room.hostId === null) room.hostId = id;
       send(ws, {
         t: 'welcome', id, hostId: room.hostId, room: roomName,
-        players: [...room.clients].filter(([pid]) => pid !== id).map(([pid, c]) => ({ id: pid, name: c.name })),
+        players: [...room.clients].filter(([pid]) => pid !== id).map(([pid, c]) => ({ id: pid, name: c.name, title: c.title })),
       });
-      broadcast(room, { t: 'playerJoined', id, name }, id);
+      broadcast(room, { t: 'playerJoined', id, name, title }, id);
       console.log(`[${roomName}] ${name}(#${id}) 입장 — ${room.clients.size}명`);
       return;
     }

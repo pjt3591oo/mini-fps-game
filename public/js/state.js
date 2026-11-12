@@ -26,6 +26,7 @@ export const G = {
   diff: 'normal',      // 이번 판의 난이도 (협동에서는 호스트 설정)
   settings: { sens: 1, fov: 75, volume: 0.6, difficulty: 'normal', map: 'arena', gfx: 'high' },
   debug: new URLSearchParams(location.search).has('debug'),
+  test: new URLSearchParams(location.search).has('test'),   // 일부러 끝내는 시험 판: 판 기록에 test 표시, 순위표 제외
 };
 
 try { Object.assign(G.settings, JSON.parse(localStorage.getItem('fps-settings') || '{}')); } catch {}

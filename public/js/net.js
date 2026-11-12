@@ -23,12 +23,12 @@ export const net = {
   },
   sendTo(to, k, data = {}) { this.send('to', { to, k, ...data }); },
 
-  connect(name, room) {
+  connect(name, room, title = null) {
     return new Promise((resolve, reject) => {
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';
       const ws = new WebSocket(`${proto}://${location.host}`);
       let done = false;
-      ws.onopen = () => ws.send(JSON.stringify({ t: 'join', name, room }));
+      ws.onopen = () => ws.send(JSON.stringify({ t: 'join', name, room, title }));
       ws.onerror = () => { if (!done) { done = true; reject(new Error('서버에 연결할 수 없습니다')); } };
       ws.onclose = () => {
         const was = this.connected;
@@ -43,10 +43,10 @@ export const net = {
         if (msg.t === 'welcome') {
           this.ws = ws; this.connected = true; this.id = msg.id; this.name = name; this.room = msg.room;
           this.isHost = msg.hostId === msg.id;
-          for (const p of msg.players) this.players.set(p.id, new RemotePlayer(p.id, p.name));
+          for (const p of msg.players) this.players.set(p.id, Object.assign(new RemotePlayer(p.id, p.name), { title: p.title || null }));
           done = true; resolve(msg);
         } else if (msg.t === 'playerJoined') {
-          this.players.set(msg.id, new RemotePlayer(msg.id, msg.name));
+          this.players.set(msg.id, Object.assign(new RemotePlayer(msg.id, msg.name), { title: msg.title || null }));
         } else if (msg.t === 'playerLeft') {
           const p = this.players.get(msg.id);
           if (p) { p.dispose(); this.players.delete(msg.id); }

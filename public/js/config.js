@@ -12,7 +12,8 @@ export const PLAYER = {
 export const WEAPONS = {
   rifle: {
     name: '소총', key: 1,
-    mag: 30, reserve: 150, fireDelay: 0.1, reload: 1.5,
+    // fireDelay 0.117: 연사 버그(사이클 13)를 고치기 전 60fps의 실제 연사(초당 8.58발)를 유지한다. 설계상 0.1이던 값
+    mag: 30, reserve: 150, fireDelay: 0.117, reload: 1.5,
     dmg: 30, headMul: 3, spread: 0.006, pellets: 1, auto: true,
     adsFov: 48, adsSpreadMul: 0.4, recoil: 0.008, kick: 0.05,
     adsPos: [0, -0.15, -0.36],
@@ -126,3 +127,69 @@ export const MUTATORS = {
 export const DASH = { speed: 21, dur: 0.17, cd: 2.5, iframe: 0.25 };
 
 export const NET_RATE = 15; // 초당 상태 전송 횟수
+
+// ---------- 판 사이 성장 (사이클 11) ----------
+// 원칙: 영구 피해·체력 % 없음. 힘은 보급 슬롯 2개(상점 가격 60 이하 품목)까지, 그 뒤는 칭호·외형만.
+// 메타 효과는 각자 로컬에서만 적용하고 호스트 시뮬레이션(적 체력·스폰·투하)은 바꾸지 않는다.
+export const META = {
+  // 판 XP = min(cap, (참가 + 웨이브×클리어 + 처치÷killDiv + 보스) × 난이도) + 최고 웨이브 갱신 보너스 + 훈장 XP
+  xp: { join: 10, perWave: 5, killDiv: 4, boss: 20, warlord: 30, cap: 150, recordPer: 10, recordCap: 30,
+        diff: { easy: 0.8, normal: 1, hard: 1.2 } },
+  // 계급 2~10의 누적 XP 문턱. 11부터는 계급당 +after (칭호만)
+  ranks: [30, 80, 150, 250, 400, 600, 850, 1150, 1500], after: 500,
+  titles: ['신병', '이병', '일병', '상병', '병장', '하사', '중사', '상사', '원사', '베테랑'],   // 계급 1~10, 이후 '베테랑 ★n'
+  slots: [[2, 1], [5, 2]],   // [계급, 열리는 슬롯 수]
+  // 지참품: 판을 시작할 때 받는다. 모두 상점 가격 60 이하 (밸런스 상한: 두 슬롯 합계 약 110 크레딧어치)
+  kit: {
+    medkit:  { name: '구급 주사 1개', rank: 2, value: 60 },
+    grenade: { name: '수류탄 +1',     rank: 3, value: 20 },
+    reroll:  { name: '다시 뽑기권 1장', rank: 4, value: 40 },
+    credits: { name: '시작 크레딧 50', rank: 5, value: 50, amount: 50 },
+  },
+  // ---------- 보관함 물건 (사이클 12) — 모두 수치 없음 ----------
+  // kind: skin(무기 색) | title(칭호) | killfx(처치 파편 색)
+  // src: rank(계급) | mastery(그 무기 숙련 3단계) | drop(드롭으로 얻어 owned에 기록) | ach(훈장) | map(그 맵 웨이브 n 클리어) | mut(변이 n종 클리어) | rank-title(현재 계급명)
+  // skin 값: color(몸체 색), metal·rough(재질), glow·glowI(발광 — 1인칭이라 0.35 이하)
+  items: {
+    desert:  { kind: 'skin', src: 'rank', rank: 6, name: '사막',   color: 0xb59a6a },
+    olive:   { kind: 'skin', src: 'rank', rank: 7, name: '올리브', color: 0x6b7a4a },
+    arctic:  { kind: 'skin', src: 'rank', rank: 8, name: '설원',   color: 0xd8dde2 },
+    crimson: { kind: 'skin', src: 'rank', rank: 9, name: '진홍',   color: 0x8a2a2a },
+    mastery: { kind: 'skin', src: 'mastery', name: '숙련 금장', color: 0xc8a040, metal: 0.7, rough: 0.3 },
+    'd-teal':  { kind: 'skin', src: 'drop', grade: 'common', name: '청록', color: 0x2f8f8a },
+    'd-navy':  { kind: 'skin', src: 'drop', grade: 'common', name: '해군', color: 0x2a3f6a },
+    'd-sand':  { kind: 'skin', src: 'drop', grade: 'common', name: '모래', color: 0xc9b48a },
+    'd-rust':  { kind: 'skin', src: 'drop', grade: 'common', name: '녹',   color: 0x9a4a2a },
+    'd-slate': { kind: 'skin', src: 'drop', grade: 'common', name: '청회', color: 0x5a6672 },
+    'd-bone':  { kind: 'skin', src: 'drop', grade: 'common', name: '상아', color: 0xe8dcc0 },
+    'd-moss':  { kind: 'skin', src: 'drop', grade: 'common', name: '이끼', color: 0x4a6a3a },
+    'd-plum':  { kind: 'skin', src: 'drop', grade: 'common', name: '자두', color: 0x5a2f5a },
+    // 처치 파편 색은 픽업 색(탄약 금색·보급 청록)과 겹치지 않게
+    'fx-violet': { kind: 'killfx', src: 'drop', grade: 'common', name: '보랏빛 파편', color: 0xb050ff },
+    'fx-white':  { kind: 'killfx', src: 'drop', grade: 'common', name: '백색 파편', color: 0xf0f4ff },
+    'd-gunmetal': { kind: 'skin', src: 'drop', grade: 'rare', name: '건메탈', color: 0x4a4e54, metal: 0.8, rough: 0.3 },
+    'd-copper':   { kind: 'skin', src: 'drop', grade: 'rare', name: '구리',   color: 0xb87333, metal: 0.8, rough: 0.3 },
+    'd-chrome':   { kind: 'skin', src: 'drop', grade: 'rare', name: '크롬',   color: 0xd0d4d8, metal: 0.8, rough: 0.15 },
+    'd-cobalt':   { kind: 'skin', src: 'drop', grade: 'rare', name: '코발트', color: 0x2a5ab8, metal: 0.8, rough: 0.3 },
+    't-scav':  { kind: 'title', src: 'drop', grade: 'rare', name: '수집가' },
+    't-ghost': { kind: 'title', src: 'drop', grade: 'rare', name: '유령' },
+    'd-ember':  { kind: 'skin', src: 'drop', grade: 'legend', name: '잔불',   color: 0x3a1a10, glow: 0xff5a1a, glowI: 0.35 },
+    'd-aurora': { kind: 'skin', src: 'drop', grade: 'legend', name: '오로라', color: 0x10283a, glow: 0x40ffc8, glowI: 0.35 },
+    // 칭호 (드롭 외)
+    'rank':       { kind: 'title', src: 'rank-title', name: '계급명' },
+    't-warlord':  { kind: 'title', src: 'ach', ach: 'warlord', name: '포격 사냥꾼' },
+    't-steel':    { kind: 'title', src: 'ach', ach: 'hard-10', name: '강철' },
+    't-bare':     { kind: 'title', src: 'ach', ach: 'bare-10', name: '맨몸' },
+    't-comrade':  { kind: 'title', src: 'ach', ach: 'revive-5', name: '전우' },
+    't-marksman': { kind: 'title', src: 'ach', ach: 'heads-40', name: '명중 사수' },
+    't-plaza':    { kind: 'title', src: 'map', map: 'arena', wave: 10, name: '광장 수비대' },
+    't-depot':    { kind: 'title', src: 'map', map: 'depot', wave: 10, name: '창고 지기' },
+    't-mutant':   { kind: 'title', src: 'mut', n: 7, name: '변이 정복자' },
+  },
+  grades: { common: { name: '일반', w: 60 }, rare: { name: '희귀', w: 30 }, legend: { name: '전설', w: 10 } },
+  // 드롭: 보스 웨이브 클리어(그 웨이브 시작을 본 사람), 웨이브 진행 중 보급품 획득(방 전원 각자), 상급·숙련 훈장 확정
+  drop: { boss: 0.4, supply: 0.1, dupXp: 15, achGrade: { 상급: 'rare', 숙련: 'legend' } },
+  // 무기 숙련도 (누적 처치) — 처리 속도가 달라 무기마다 문턱이 다르다. 보상은 칭호·외형만
+  mastery: { rifle: [50, 250, 1000], shotgun: [30, 150, 600], sniper: [20, 100, 400], pistol: [20, 100, 400], rocket: [10, 50, 200] },
+  tierXp: { 입문: 10, 초급: 20, 중급: 40, 상급: 80, 숙련: 150 },
+};

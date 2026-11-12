@@ -142,7 +142,7 @@ export function updatePlayer(dt, ads) {
   moveBody(player, v.x * dt, v.z * dt, dt, PLAYER.R, player.height);
 
   // 체력 자연 회복
-  if (!player.dead && G.time - player.lastHurt > PLAYER.REGEN_DELAY && player.hp < G.mods.maxHp)
+  if (!player.dead && G.time - player.lastHurt > Math.max(2, PLAYER.REGEN_DELAY * G.mods.regenDelay) && player.hp < G.mods.maxHp)
     player.hp = Math.min(G.mods.maxHp, player.hp + PLAYER.REGEN_RATE * dt);
 
   // 카메라: 계단을 오를 때 부드럽게 따라가도록 보간

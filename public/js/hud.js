@@ -1,7 +1,8 @@
 // HUD: 체력/탄약/조준선/미니맵/킬 피드/배너
 import * as THREE from 'three';
 import { camera } from './engine.js';
-import { WEAPONS, WEAPON_ORDER, DASH, ITEMS, UPGRADE } from './config.js';
+import { WEAPONS, WEAPON_ORDER, DASH, ITEMS, UPGRADE, META } from './config.js';
+const escHtml = s => String(s).replace(/[<>&"']/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' })[c]);
 import { G } from './state.js';
 import { player } from './player.js';
 import { net } from './net.js';
@@ -158,8 +159,10 @@ export function updateHUD(dt, W, remaining) {
     const perks = Object.entries(G.perks).map(([n, c]) => `<span class="${G.rarePerks?.has(n) ? 'rare' : ''}">${icon(n)}${c > 1 ? `<b>${c}</b>` : ''}</span>`).join('');
     if (el.perklist.innerHTML !== perks) el.perklist.innerHTML = perks;
     if (net.connected) {
-      el.players.innerHTML = `<div>${net.name} (나) — ${G.score.toLocaleString()}</div>` +
-        [...net.players.values()].map(p => `<div class="${p.dead ? 'dead' : ''}">${p.name} — ${(p.score || 0).toLocaleString()}</div>`).join('');
+      // 이름은 다른 사람이 정한 글자라 이스케이프한다. 칭호는 아는 칭호 id일 때만 이름으로 바꿔 보인다
+      const ttl = id => { const it = META.items[id]; return it && it.kind === 'title' && id !== 'rank' ? `<span class="ttl">${it.name}</span>` : ''; };
+      el.players.innerHTML = `<div>${ttl(G.myTitle)}${escHtml(net.name)} (나) — ${G.score.toLocaleString()}</div>` +
+        [...net.players.values()].map(p => `<div class="${p.dead ? 'dead' : ''}">${ttl(p.title)}${escHtml(p.name)} — ${(p.score || 0).toLocaleString()}</div>`).join('');
     } else if (el.players.innerHTML) el.players.innerHTML = '';
   }
 

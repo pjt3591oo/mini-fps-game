@@ -1,11 +1,11 @@
 // 진입점: 게임 상태, 입력, 메인 루프
 import * as THREE from 'three';
 import { renderer, camera, clock, render } from './engine.js';
-import { NET_RATE, WEAPON_ORDER, ITEMS, CREDITS, WEAPONS } from './config.js';
+import { NET_RATE, WEAPON_ORDER, ITEMS, CREDITS, WEAPONS, META } from './config.js';
 import { G, saveSettings } from './state.js';
 import { loadMap, loadModel, lineOfSight, staticMeshes, world } from './world.js';
 import { player, controls, resetPlayer, updatePlayer, jump, dash, healPlayer } from './player.js';
-import { W, upgradeGunModels, resetWeapons, updateWeapons, switchWeapon, cycleWeapon, reload, throwGrenade, addAmmo, resetGrenades, setGunVisible, grantRocket, hasFx, magSize } from './weapons.js';
+import { W, upgradeGunModels, setGunSkin, resetWeapons, updateWeapons, switchWeapon, cycleWeapon, reload, throwGrenade, addAmmo, resetGrenades, setGunVisible, grantRocket, hasFx, magSize } from './weapons.js';
 import { updateEnemies, updateWaves, resetEnemies, remainingEnemies, waves, skipIntermission } from './enemies.js';
 import { net, updateRemotePlayers } from './net.js';
 import { updateEffects, pingFx } from './effects.js';
@@ -14,6 +14,9 @@ import { showHud, showBanner, addFeed, hitmarker, setScope, showHurt, updateHUD,
 import { resetShop, addCredits, openShop, closeShop, canShop, useItem, tryUpgrade, buyItem, upgradeInfo, shopFreezesTimer, updateStrikeAim } from './shop.js';
 import { icon, gun } from './icons.js';
 import { loadAssets } from './assets.js';
+import { meta, saveMeta, rankOf, slotCount, kitOpen, has, itemName, itemSource, dropChance, masteryTier, unlocksAt, ACH, achXp, nearAch, setMetaListener,
+  startRun, endRun, currentRun, metaKill, metaWaveStart, metaWaveClear, metaEvent, metaSupply, checkAch, runBreakdown, UNLOCKS, computeUnlocks } from './meta.js';
+import { initVault, openVault, vaultOpen, vaultKey, freshCount } from './vault.js';
 import { offerPerks, choosePerk, closePerks, perkOpen, resetPerks, rerollPerks, updatePerks } from './perks.js';
 
 const $ = id => document.getElementById(id);
@@ -39,6 +42,7 @@ function updateHints(dt) {
   sfx.hint();
 }
 const ENEMY_HINTS = {
+  grunt: '병사는 붙어서 때립니다. 뒤로 물러나며 쏘고, 머리를 맞히면 훨씬 빨리 쓰러집니다',
   rusher: '돌격병은 빠르지만 약합니다. 가까이 오기 전에 샷건(2)으로 맞받아치세요',
   shooter: '보라색 사수는 쏘기 직전에 빛납니다. 옆으로 움직이거나 Q 대시로 탄을 피하세요',
   bomber: '노란 자폭병은 가까이 오면 터집니다. 멀리서 쏘면 주변 적까지 휩쓸립니다',
@@ -56,6 +60,7 @@ G.hooks.scope = setScope;
 G.hooks.ammo = addAmmo;
 G.hooks.perkDone = () => !perkOpen();
 G.hooks.waveStart = (info) => {
+  metaWaveStart(info);
   closePerks(true);
   hideShop();
   revive();
@@ -77,15 +82,19 @@ G.hooks.waveClear = (info) => {
   showBanner(`WAVE ${info.n} 클리어`, `크레딧 +${cr} · 체력 +25`, 2200);
   G.interEnd = G.time + (info.dur || 10);
   offerPerks(info.dur || 10);
+  metaWaveClear(info);
+  flushAch();   // 미뤄 둔 훈장 알림은 웨이브 클리어 때 낸다
 };
 G.hooks.kill = (def, head, pts, noReward) => {
   G.stats.kw[W.current] = (G.stats.kw[W.current] || 0) + 1;
-  if (!noReward) addCredits(Math.round(def.score * CREDITS.perScore * (head ? CREDITS.head : 1)));
+  if (!noReward) addCredits(Math.round(def.score * CREDITS.perScore * (head ? CREDITS.head : 1) * G.mods.loot));   // 해금 특성 '전리품'
   // +7 고유 효과: 헤드샷 처치 시 탄 환급(소총 3발, 저격총 1발), 권총은 처치마다 대시 대기 감소
   const k = W.current;
   if (head && hasFx(k, 7) && (k === 'rifle' || k === 'sniper')) W.ammo[k].mag = Math.min(magSize(k), W.ammo[k].mag + (k === 'rifle' ? 3 : 1));
   if (k === 'pistol' && hasFx(k, 7)) player.dashCd = Math.max(0, player.dashCd - 0.5);
+  metaKill(noReward);
 };
+G.hooks.perkPick = () => metaEvent('perk');
 G.hooks.assist = (def) => addCredits(Math.round(def.score * CREDITS.perScore * CREDITS.assist));
 G.hooks.msg = flashMsg;
 G.hooks.bought = (k) => hint('item-' + k, `${ITEMS[k].name}: 전투 중 ${ITEMS[k].key} 키로 사용합니다${k === 'strike' ? ' (누르고 있으면 폭격 지점이 보이고, 떼면 요청)' : ''}`);
@@ -95,16 +104,29 @@ G.hooks.supply = () => {
   showHint('보급품 투하! 하늘색 빛기둥을 찾아가세요 (미니맵의 하늘색 표시)', 5000);
   hintT = Math.max(hintT, 5.5);
 };
+// 보급품 효과 3종 (확률 40 / 35 / 25). 해금 특성 '보급 전문가'면 서로 다른 2가지를 받는다
+const SUPPLY_FX = [
+  { w: 0.4, name: '로켓 발사기', sub: '4발 · 5번 키 · 가까이서 쏘면 나도 다칩니다', apply: () => grantRocket() },
+  { w: 0.35, name: '피해 증폭', sub: '20초 동안 모든 피해 2배', apply: () => { G.buffs.amp = G.time + 20; } },
+  { w: 0.25, name: '추가 체력', sub: '체력 +75 (최대치 초과 가능)', apply: () => { player.hp = Math.min(G.mods.maxHp + 75, player.hp + 75); } },
+];
+function pickSupplyFx(list) {
+  let x = Math.random() * list.reduce((a, f) => a + f.w, 0);
+  for (const f of list) if ((x -= f.w) < 0) return f;
+  return list[list.length - 1];
+}
 G.hooks.supplyPick = () => {
   G.stats.supplyPicked++;
   addCredits(CREDITS.supply);
-  const r = Math.random();
-  if (r < 0.4) { grantRocket(); showBanner('로켓 발사기', '4발 · 5번 키 · 가까이서 쏘면 나도 다칩니다', 2600); }
-  else if (r < 0.75) { G.buffs.amp = G.time + 20; showBanner('피해 증폭', '20초 동안 모든 피해 2배', 2600); }
-  else { player.hp = Math.min(G.mods.maxHp + 75, player.hp + 75); showBanner('추가 체력', '체력 +75 (최대치 초과 가능)', 2600); }
+  const left = [...SUPPLY_FX], got = [];
+  for (let n = G.mods.supply2 ? 2 : 1; n > 0; n--) { const f = pickSupplyFx(left); left.splice(left.indexOf(f), 1); f.apply(); got.push(f); }
+  showBanner(got.map(f => f.name).join(' + '), got.map(f => f.sub).join(' · '), 2600);
   sfx.perk();
   addFeed('보급품 획득', true, 'star');
+  metaSupply(true);
 };
+G.hooks.supplyPickOther = () => metaSupply(false);
+G.hooks.steady = () => { flashMsg('호흡 정지 — 다음 한 발 피해 +25%'); sfx.hint(); };
 player.onHurt = showHurt;
 player.onDeath = () => {
   W.firing = false; W.adsHeld = false;
@@ -133,6 +155,7 @@ function updateRevive(dt) {
     near.dead = false;
     addFeed(`${near.name} 님을 부활시켰습니다`, true);
     G.score += 150;
+    metaEvent('revive');
   }
 }
 net.on('to:revive', (msg) => {
@@ -169,6 +192,66 @@ function revive() {
   if (!player.dead) return;
   resetPlayer(net.id);
   addFeed('부활했습니다', true);
+}
+
+// ---------- 훈장 알림 (사이클 11) ----------
+// 판 도중에는 달성했을 때만 왼쪽 위에 짧게 띄운다. 막 맞았거나 체력이 35% 미만이면 미뤘다가 안전해지거나 웨이브 클리어 때 낸다.
+const achQueue = [];
+let achShowing = 0, achCheckT = 0;
+initVault(() => { applySkin(); if (G.mode === 'menu') showProgress('menu'); });
+setMetaListener((ev) => { if (G.mode === 'playing' || G.mode === 'paused') achQueue.push(ev); });
+const GRADE_CLS = { common: 'g-common', rare: 'g-rare', legend: 'g-legend' };
+// 알림 한 장: 훈장 / 드롭 / 중복 전환 / 묶음
+function showAch(ev) {
+  const el = $('ach');
+  let tag, name, sub, right, cls = '';
+  if (ev.kind === 'ach') { tag = `훈장 · ${ev.a.tier}`; name = ev.a.name; sub = ev.a.desc; right = `+${ev.xp} XP`; }
+  else if (ev.kind === 'drop') {
+    const it = META.items[ev.id];
+    tag = `보관함에 추가 · ${META.grades[it.grade].name}`; name = it.name; sub = '메뉴의 보관함(I)에서 장착할 수 있습니다'; right = ''; cls = GRADE_CLS[it.grade];
+  } else if (ev.kind === 'dup') { tag = '수집 완료'; name = '드롭이 XP로 바뀌었습니다'; sub = '보관함의 드롭 물건을 모두 모았습니다'; right = `+${ev.xp} XP`; }
+  else { tag = '진행'; name = `훈장·물건 ${ev.n}개`; sub = ev.names; right = ev.xp ? `+${ev.xp} XP` : ''; }
+  el.className = cls;
+  el.innerHTML = `${icon('star')}<div><small></small><b></b><span></span></div><em>${right}</em>`;
+  el.querySelector('small').textContent = tag;
+  el.querySelector('b').textContent = name;
+  el.querySelector('span').textContent = sub;
+  void el.offsetWidth; el.classList.add('show');
+  sfx.perk();
+  achShowing = 3.2;
+}
+// 4개 이상 쌓이면 전설 드롭을 뺀 나머지를 한 줄로 묶는다 (보스 웨이브에 알림이 길게 이어지지 않게)
+function nextAch() {
+  if (achQueue.length >= 4) {
+    const keep = achQueue.filter(e => e.kind === 'drop' && META.items[e.id].grade === 'legend');
+    const rest = achQueue.filter(e => !keep.includes(e));
+    if (rest.length >= 2) {
+      achQueue.length = 0;
+      achQueue.push(...keep, { kind: 'many', n: rest.length, xp: rest.reduce((a, e) => a + (e.xp || 0), 0),
+        names: rest.map(e => e.kind === 'ach' ? e.a.name : e.kind === 'drop' ? META.items[e.id].name : '수집 완료').join(' · ') });
+    }
+  }
+  return achQueue.shift();
+}
+function updateAch(dt) {
+  achCheckT -= dt;
+  if (achCheckT <= 0) { achCheckT = 0.5; checkAch(); }   // 상점 구매·아이템 사용 등 판 안 조건
+  achShowing -= dt;
+  if (achShowing <= 0) $('ach').classList.remove('show');
+  if (achShowing > 0 || !achQueue.length) return;
+  const danger = G.time - player.lastHurt < 1.5 || player.hp < G.mods.maxHp * 0.35;
+  if (!danger) showAch(nextAch());
+}
+function flushAch() { if (achShowing <= 0 && achQueue.length) showAch(nextAch()); }
+
+// 무기 외형 색 (무기마다 장착). 가지지 않은 것은 기본색으로 그린다 (저장 값은 그대로)
+function applySkin() {
+  const per = {};
+  for (const k of WEAPON_ORDER) {
+    const id = meta.inv.equip.skin[k];
+    per[k] = id && has(id, k) ? META.items[id] : null;
+  }
+  setGunSkin(per);
 }
 
 // ---------- 맵 ----------
@@ -209,6 +292,9 @@ function resetGame() {
   resetPlayer(net.id);
   camera.rotation.set(0, 0, 0);
   clearHud();
+  achQueue.length = 0; achShowing = 0; $('ach').classList.remove('show');
+  startRun();   // 지참품 지급 (기존 필드·상한 안에서)
+  applySkin();
 }
 
 // 일시정지 화면: 지금 판의 상태를 그림으로 보여 준다
@@ -296,8 +382,10 @@ function gameOver(fromNet = false) {
   rec.bestScore = Math.max(rec.bestScore, G.score); rec.bestWave = Math.max(rec.bestWave, G.wave);
   rec.runs++; rec.kills += G.kills;
   try { localStorage.setItem('fps-records', JSON.stringify(rec)); } catch {}
+  const run = endRun('over');
+  achQueue.length = 0; achShowing = 0; $('ach').classList.remove('show');   // 결과 화면이 이번 판 훈장·드롭을 모두 보여 준다
   submitScore();
-  submitRun();
+  submitRun(run);
   const st = G.stats, acc = st.shots ? Math.round(st.hits / st.shots * 100) : 0;
   const mm = Math.floor(G.time / 60), ss = String(Math.floor(G.time % 60)).padStart(2, '0');
   const tile = (ico, val, label, cls = '') => `<div class="rt ${cls}">${icon(ico)}<b>${val}</b><span>${label}</span></div>`;
@@ -306,8 +394,9 @@ function gameOver(fromNet = false) {
     <div class="rhead"><div><span>WAVE</span><b>${String(G.wave).padStart(2, '0')}</b></div><div><span>점수</span><b>${G.score.toLocaleString()}</b></div>
       <div class="best"><span>최고 기록</span><b>WAVE ${rec.bestWave} · ${rec.bestScore.toLocaleString()}</b></div></div>
     <div class="rgrid">${tile('skull', G.kills, '처치')}<div class="rt acc">${ring}<b>${acc}%</b><span>명중률</span></div>${tile('head', st.heads, '헤드샷')}
-      ${tile('hurt', st.taken, '받은 피해')}${tile('clock', `${mm}:${ss}`, '생존')}${tile('coin', G.earned, '번 크레딧', 'cr')}</div>
-    ${causeText()}`);
+      ${tile('clock', `${mm}:${ss}`, '생존')}</div>
+    ${causeText()}${adviceText()}`);
+  showProgress('over', run);
   if (!G.debug) controls.unlock();
 }
 
@@ -330,7 +419,7 @@ async function loadBoard() {
   } catch { $('board').innerHTML = ''; }
 }
 function submitScore() {
-  if (G.debug || G.score <= 0) return;
+  if (G.debug || G.test || G.score <= 0) return;   // 테스트 판(?test)은 순위표에 올리지 않는다
   fetch('/api/scores', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name: G.settings.name || 'Player', score: G.score, wave: G.wave, diff: G.diff, coop: net.connected }),
@@ -345,24 +434,99 @@ function causeText() {
   return `<div class="cause"><div class="ctitle">${icon('skull')}<span><b>${player.lastSrc}</b>에 쓰러짐</span></div>` +
     top.map(([k, v]) => `<div class="cbar"><label>${k}</label><i><u style="width:${Math.round(v / max * 100)}%"></u></i><b>${v}</b></div>`).join('') + '</div>';
 }
+// 결과 화면: "다음 판 한 가지" — 상점을 안 열었으면 상점 안내가 먼저, 아니면 쓰러진 원인에 맞는 조언
+const CAUSE_TIP = { '병사': 'grunt', '돌격병': 'rusher', '사수': 'shooter', '자폭병': 'bomber', '중장갑': 'tank', '척탄병': 'grenadier', '포격대장': 'warlord', '보스': 'boss' };
+function adviceText() {
+  let tip = '';
+  if (!G.shopSeen && !Object.keys(G.bought).length && G.wave >= 2) tip = '웨이브 사이에 B로 상점을 열어 보세요. 번 크레딧으로 무기를 강화하고 구급 주사를 살 수 있습니다';
+  else if (player.lastSrc.startsWith('드럼통')) tip = '드럼통은 가까이서 쏘지 마세요. 적이 모였을 때 멀리서 쏘면 무기가 됩니다';
+  else {
+    const k = Object.keys(CAUSE_TIP).find(n => player.lastSrc.startsWith(n));
+    if (k) tip = ENEMY_HINTS[CAUSE_TIP[k]];
+  }
+  return tip ? `<div class="advice">${icon('info')}<span><b>다음 판 한 가지</b>${tip}</span></div>` : '';
+}
+
+// ---------- 진행 카드 (메뉴 / 결과 화면) ----------
+const pct = (x, a, b) => Math.max(0, Math.min(100, (x - a) / (b - a) * 100));
+function rankBar(xpFrom, xpTo) {
+  const r = rankOf(xpTo), r0 = rankOf(xpFrom), up = r.rank > r0.rank;
+  const from = up ? 0 : pct(xpFrom, r.cur, r.next);
+  return `<div class="rank"><em>${r.rank}</em><div><b>${r.title}</b><small>${xpTo.toLocaleString()} XP · 다음 계급까지 ${(r.next - xpTo).toLocaleString()}</small></div>${up ? '<i class="up">계급 상승</i>' : ''}</div>
+    <div class="xpbar"><u data-from="${from}" data-to="${pct(xpTo, r.cur, r.next)}"></u></div>`;
+}
+function nextUnlock() {
+  const r = rankOf().rank;
+  for (let k = r + 1; k <= META.titles.length; k++) { const u = unlocksAt(k).filter(t => !t.startsWith('계급명')); if (u.length) return `<div class="nextu">${icon('star')}<span>계급 ${k}: <b>${u.join(' · ')}</b></span></div>`; }
+  return '';
+}
+function achList(list) {
+  return list.map(({ a, c, g }) => `<div class="ach"><span>${a.name}<small>${a.desc}</small></span><i><u style="width:${Math.round(c / g * 100)}%"></u></i><b>${c} / ${g}</b></div>`).join('');
+}
+function masteryLine(run) {
+  // 이번 판에 가장 많이 쓴 무기의 숙련도
+  const top = Object.entries(G.stats.kw).sort((a, b) => b[1] - a[1])[0];
+  const k = top ? top[0] : 'rifle', m = masteryTier(k);
+  if (m.next == null) return `<div class="mast">${gun(k)}<span>${WEAPONS[k].name} 숙련 최고 단계</span></div>`;
+  return `<div class="mast">${gun(k)}<span>${WEAPONS[k].name} 숙련 ${m.tier}단계 · ${m.n} / ${m.next}</span><i><u style="width:${Math.round(m.n / m.next * 100)}%"></u></i></div>`;
+}
+function showProgress(mode, run) {
+  const el = $('progcard');
+  const got = ACH.filter(a => meta.ach[a.id]).length;
+  if (mode === 'over' && run) {
+    const b = runBreakdown(run);
+    const rows = [['참전', b.join], ['클리어한 웨이브', b.waves], ['처치', b.kills], ['보스', b.boss]].filter(([, v]) => v)
+      .map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('');
+    const earned = run.ach.map(id => ACH.find(a => a.id === id)).map(a => `<span class="medal">${icon('star')}${a.name}<em>+${achXp(a)}</em></span>`).join('') +
+      run.drops.map(id => `<span class="medal drop g-${META.items[id].grade}">${icon('star')}${META.items[id].name}</span>`).join('');
+    el.innerHTML = `<h4>이번 판에서 얻은 것</h4>${rankBar(run.xpBefore, meta.xp)}
+      <div class="xprow">${rows}${b.diff !== 1 ? `<div><span>난이도 배율</span><b>×${b.diff}</b></div>` : ''}${b.capped ? '<div><span>판당 상한</span><b>150</b></div>' : ''}
+        ${b.record ? `<div class="rec"><span>최고 웨이브 갱신</span><b>${b.record}</b></div>` : ''}${b.achXp ? `<div><span>훈장</span><b>${b.achXp}</b></div>` : ''}${b.dropXp ? `<div><span>수집 전환</span><b>${b.dropXp}</b></div>` : ''}
+        <div class="sum"><span>합계</span><b>+${b.total} XP</b></div></div>
+      ${earned ? `<div class="medals">${earned}</div>` : ''}
+      ${nextUnlock()}${masteryLine(run)}
+      <h5>가까운 훈장</h5>${achList(nearAch(2))}`;
+    const near = nearAch(1)[0];
+    $('nextgoal').innerHTML = near ? `다음 목표: <b>${near.a.name}</b> — ${near.a.desc}` : '';
+  } else {
+    // 한 판이라도 했으면 조작표 대신 진행 카드를 크게 보여 준다 (처음 온 사람에게는 조작표가 먼저)
+    const vet = meta.tot.runs > 0;
+    overlay.classList.toggle('vet', vet);
+    const kit = meta.kit.slice(0, slotCount()).filter(Boolean).map(k => META.kit[k].name);
+    el.innerHTML = `<h4>진행</h4>${rankBar(meta.xp, meta.xp)}${nextUnlock()}
+      ${vet ? `<h5>가까운 훈장 <small>${got} / ${ACH.length}</small></h5>${achList(nearAch(3))}
+        <div class="kitsum">출격 준비: ${slotCount() ? (kit.length ? `<b>${kit.join(' · ')}</b>` : '지참품 없음') : '보급 슬롯은 계급 2에 열림'}</div>
+        <button class="vaultbtn" data-vault>보관함 (I)${freshCount() ? `<i class="new">새로 ${freshCount()}</i>` : ''}</button>` : ''}`;
+    $('nextgoal').innerHTML = '';
+  }
+  // 막대: 이전 값에서 지금 값으로 차오른다 (1.2초 안에 끝남)
+  const u = el.querySelector('.xpbar u');
+  if (u) { u.style.transition = 'none'; u.style.width = u.dataset.from + '%'; void u.offsetWidth; u.style.transition = ''; u.style.width = u.dataset.to + '%'; }
+}
+$('progcard').addEventListener('click', (e) => { if (e.target.closest('[data-vault]')) openVault(); });
+
 // 판 기록을 서버에 남긴다 (기획 검증용: data/runs.jsonl)
-function submitRun() {
+function submitRun(run = currentRun()) {
   if (G.debug) return;
   const st = G.stats;
+  const m = run ? { rank: rankOf().rank, kit: run.kit, xpGain: run.xpGain, ach: run.ach, drops: run.drops, perksOff: meta.perksOff } : null;
   fetch('/api/runs', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ map: G.map, diff: G.diff, coop: net.connected, wave: G.wave, time: Math.round(G.time), score: G.score, kills: G.kills,
-      cause: player.lastSrc, bought: G.bought, earned: G.earned, credits: G.credits, lv: W.lv, used: G.used, shopSeen: G.shopSeen, by: st.by, kw: st.kw, shots: st.shots, hits: st.hits, heads: st.heads, supplySeen: st.supplySeen, supplyPicked: st.supplyPicked, perks: G.perks }),
+      cause: player.lastSrc, bought: G.bought, earned: G.earned, credits: G.credits, lv: W.lv, used: G.used, shopSeen: G.shopSeen, by: st.by, kw: st.kw, shots: st.shots, hits: st.hits, heads: st.heads, supplySeen: st.supplySeen, supplyPicked: st.supplyPicked, perks: G.perks, meta: m, ...(G.test && { test: true }) }),
   }).catch(() => {});
 }
 
 function toMenu() {
+  if (G.mode === 'playing' || G.mode === 'paused') endRun('quit');   // 판을 버려도 그때까지의 XP는 남는다 (참가 XP 제외)
   net.disconnect();
   G.mode = 'menu';
   resetGame();
   showHud(false);
   setOverlay('menu', menuText());
+  showProgress('menu');
 }
+addEventListener('pagehide', () => { if (G.mode === 'playing' || G.mode === 'paused') endRun('quit'); });
 
 // ---------- 메뉴 ----------
 $('btnSolo').onclick = () => {
@@ -378,7 +542,10 @@ $('btnMulti').onclick = async () => {
   const room = $('inRoom').value.trim() || 'default';
   try {
     G.settings.name = name; saveSettings();
-    await net.connect(name, room);
+    // 칭호: 가진 것일 때만 id로 보낸다 (계급명은 동료가 계산할 수 없어 보내지 않음)
+    const t = meta.inv.equip.title;
+    G.myTitle = t && t !== 'rank' && has(t) ? t : null;
+    await net.connect(name, room, G.myTitle);
     if (net.isHost) await ensureMap(G.settings.map);
     resetGame();
     addFeed(`방 "${net.room}" 입장 — ${net.players.size + 1}명${net.isHost ? ' (호스트)' : ''}`, true);
@@ -496,6 +663,8 @@ function playerState() {
 // ---------- 입력 ----------
 addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT') return;
+  if (vaultOpen()) { if (vaultKey(e)) e.preventDefault(); return; }
+  if (G.mode === 'menu' && e.code === 'KeyI' && !e.repeat && meta.tot.runs > 0) { openVault(); return; }
   G.keys[e.code] = true;
   if ((G.mode === 'paused' || G.mode === 'over') && e.code === 'Enter' && !e.repeat) { $('btnResume').click(); return; }
   if (G.mode !== 'playing' || e.repeat) return;
@@ -638,6 +807,7 @@ function step(dt) {
   if (G.shopOpen && !canShop()) hideShop();
   if (active) {
     updateHints(dt);
+    updateAch(dt);
     const a = W.ammo[W.current];
     if (a.mag === 0 && a.reserve === 0) hint('noammo', '탄약이 떨어지면 4번 권총(탄약 무한)으로 바꾸세요. 적이 노란 탄약 상자를 떨어뜨립니다');
     if (!player.dead && player.hp < 35) hint('lowhp', '5초 동안 맞지 않으면 체력이 서서히 회복됩니다. 초록 상자는 체력 팩입니다');
@@ -670,6 +840,7 @@ await ensureMap(G.settings.map);
 loadBoard();
 resetGame();
 setOverlay('menu', menuText());
+showProgress('menu');
 
 if (G.debug || new URLSearchParams(location.search).has('expose')) {
   window.__game = { G, player, W, net, waves, camera, step, switchWeapon, throwGrenade, toMenu, dash, grantRocket, shop: { addCredits, showShop, hideShop, tryUpgrade, buyItem, useItem } };
