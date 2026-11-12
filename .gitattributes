@@ -1,0 +1,11 @@
+# 텍스트는 LF로 통일 (Windows·macOS 혼용 대비)
+* text=auto eol=lf
+
+# 애셋은 바이너리로 취급 (줄바꿈 변환·diff 금지)
+*.glb binary
+*.bin binary
+*.jpg binary
+*.png binary
+*.hdr binary
+*.m4a binary
+*.ogg binary

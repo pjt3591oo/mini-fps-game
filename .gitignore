@@ -1,0 +1,20 @@
+# 의존성
+node_modules/
+
+# 서버가 실행 중에 만드는 데이터 (순위표, 판 기록)
+data/scores.json
+data/runs.jsonl
+
+# 테스트가 만드는 스크린샷
+tools/coop-shop.png
+
+# Claude Code 개인 설정
+.claude/settings.local.json
+
+# OS·편집기
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log
+.vscode/
+.idea/

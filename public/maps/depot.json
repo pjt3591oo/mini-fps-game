@@ -1,0 +1,49 @@
+{
+  "name": "창고 지구",
+  "size": 42,
+  "wallHeight": 7,
+  "playerSpawns": [[0, 1, 0], [1.2, 1, 1.2], [-1.2, 1, -1.2], [1.2, 1, -1.2], [-1.2, 1, 1.2]],
+  "enemySpawns": [
+    [38, 38], [-38, 38], [38, -38], [-38, -38],
+    [38, 0], [-38, 0], [24, 39.5], [-24, 39.5], [24, -39.5], [-24, -39.5],
+    [0, 40], [0, -40], [36, 20], [-36, -20], [36, -20], [-36, 20]
+  ],
+  "perches": [[22, 26.5], [-22, 26.5], [22, -26.5], [-22, -26.5], [35.5, 0], [-35.5, 0]],
+  "objects": [
+    { "comment": "중앙 하역장 (높이 1m) + 동서 계단", "type": "box", "pos": [0, 0], "size": [9, 1, 9], "mat": "concrete" },
+    { "type": "stairs", "edge": [4.5, 0],  "dir": [1, 0],  "width": 4, "steps": 1, "stepH": 0.5, "stepD": 1.1, "mat": "concrete" },
+    { "type": "stairs", "edge": [-4.5, 0], "dir": [-1, 0], "width": 4, "steps": 1, "stepH": 0.5, "stepD": 1.1, "mat": "concrete" },
+    { "type": "stairs", "edge": [0, 4.5],  "dir": [0, 1],  "width": 4, "steps": 1, "stepH": 0.5, "stepD": 1.1, "mat": "concrete" },
+    { "type": "stairs", "edge": [0, -4.5], "dir": [0, -1], "width": 4, "steps": 1, "stepH": 0.5, "stepD": 1.1, "mat": "concrete" },
+    { "type": "box", "pos": [3.2, 3.2], "size": [2, 1.1, 2], "y": 1, "mat": "crate", "mirror": "xz" },
+
+    { "comment": "창고 네 동 — 시야를 끊는 큰 건물", "type": "box", "pos": [20, 19], "size": [14, 4.5, 10], "mat": "dark", "mirror": "xz" },
+    { "type": "box", "pos": [20, 12.6], "size": [5, 2.8, 2.8], "mat": "container", "mirror": "xz" },
+    { "type": "box", "pos": [11.5, 19], "size": [1.6, 1, 1.6], "mat": "crate", "mirror": "xz" },
+
+    { "comment": "남북 고가 통로 (높이 1.5m) + 양 끝 계단", "type": "box", "pos": [0, 33], "size": [24, 1.5, 5], "mat": "concrete", "mirror": "z" },
+    { "type": "stairs", "edge": [12, 33],   "dir": [1, 0],  "width": 5, "steps": 2, "stepH": 0.5, "stepD": 1.1, "mat": "concrete" },
+    { "type": "stairs", "edge": [-12, 33],  "dir": [-1, 0], "width": 5, "steps": 2, "stepH": 0.5, "stepD": 1.1, "mat": "concrete" },
+    { "type": "stairs", "edge": [12, -33],  "dir": [1, 0],  "width": 5, "steps": 2, "stepH": 0.5, "stepD": 1.1, "mat": "concrete" },
+    { "type": "stairs", "edge": [-12, -33], "dir": [-1, 0], "width": 5, "steps": 2, "stepH": 0.5, "stepD": 1.1, "mat": "concrete" },
+    { "type": "box", "pos": [6, 30.8], "size": [5, 1, 0.5], "y": 1.5, "mat": "metal", "mirror": "xz" },
+
+    { "comment": "동서 야적장 컨테이너", "type": "box", "pos": [32, 0], "size": [2.8, 2.8, 9], "mat": "container", "mirror": "x" },
+    { "type": "box", "pos": [32, 6.5], "size": [2, 1, 2], "mat": "crate", "mirror": "xz" },
+    { "type": "box", "pos": [24, 0], "size": [1.8, 1.7, 5], "mat": "dark", "mirror": "x" },
+
+    { "comment": "중앙 도로 엄폐물", "type": "box", "pos": [0, 12], "size": [5, 1.6, 1.2], "mat": "dark", "mirror": "z" },
+    { "type": "box", "pos": [9.5, 7], "size": [2.2, 1.6, 2.2], "mat": "crate", "mirror": "xz" },
+    { "type": "box", "pos": [11.2, 8.4], "size": [1.4, 0.9, 1.4], "mat": "crate", "mirror": "xz" },
+    { "type": "box", "pos": [5, 22], "size": [1.6, 6, 1.6], "mat": "concrete", "mirror": "xz" },
+
+    { "comment": "외곽 골목 상자", "type": "box", "pos": [34, 30], "size": [2.4, 1.8, 2.4], "mat": "crate", "mirror": "xz" },
+    { "type": "box", "pos": [30, 36], "size": [1.6, 1, 1.6], "mat": "crate", "mirror": "xz" },
+    { "type": "box", "pos": [18, 27.5], "size": [2, 1.2, 2], "mat": "crate", "mirror": "xz" }
+  ],
+  "barrels": [
+    [8, 0], [-8, 0], [13.5, 13], [-13.5, -13], [13.5, -13], [-13.5, 13],
+    [28, 8], [-28, -8], [0, 26], [0, -26], [36, 14], [-36, -14]
+  ],
+  "models": []
+}

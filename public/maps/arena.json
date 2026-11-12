@@ -1,0 +1,54 @@
+{
+  "name": "요새 광장",
+  "size": 50,
+  "wallHeight": 6,
+  "playerSpawns": [[0, 2, 0], [3, 2, 3], [-3, 2, -3], [3, 2, -3], [-3, 2, 3]],
+  "enemySpawns": [
+    [44, 44], [-44, 44], [44, -44], [-44, -44],
+    [0, 45], [0, -45], [45, 18], [45, -18], [-45, 18], [-45, -18],
+    [22, 45], [-22, 45], [22, -45], [-22, -45]
+  ],
+  "perches": [[29.5, 12], [-29.5, 12], [29.5, -12], [-29.5, -12], [0, 36.2], [0, -36.2]],
+  "objects": [
+    { "comment": "중앙 언덕 (높이 2m) + 사방 계단", "type": "box", "pos": [0, 0], "size": [14, 2, 14], "mat": "concrete" },
+    { "type": "stairs", "edge": [7, 0],  "dir": [1, 0],  "width": 5, "steps": 3, "stepH": 0.5, "stepD": 1.1, "mat": "concrete" },
+    { "type": "stairs", "edge": [-7, 0], "dir": [-1, 0], "width": 5, "steps": 3, "stepH": 0.5, "stepD": 1.1, "mat": "concrete" },
+    { "type": "stairs", "edge": [0, 7],  "dir": [0, 1],  "width": 5, "steps": 3, "stepH": 0.5, "stepD": 1.1, "mat": "concrete" },
+    { "type": "stairs", "edge": [0, -7], "dir": [0, -1], "width": 5, "steps": 3, "stepH": 0.5, "stepD": 1.1, "mat": "concrete" },
+
+    { "comment": "언덕 모서리 난간 (엄폐용)", "type": "box", "pos": [5.2, 6.6], "size": [3.4, 1, 0.5], "y": 2, "mat": "metal", "mirror": "xz" },
+    { "type": "box", "pos": [6.6, 5.2], "size": [0.5, 1, 3.4], "y": 2, "mat": "metal", "mirror": "xz" },
+
+    { "comment": "동서 저격 망루 (높이 1.5m)", "type": "box", "pos": [39, 0], "size": [9, 1.5, 12], "mat": "concrete", "mirror": "x" },
+    { "type": "stairs", "edge": [34.5, 0],  "dir": [-1, 0], "width": 4, "steps": 2, "stepH": 0.5, "stepD": 1.1, "mat": "concrete" },
+    { "type": "stairs", "edge": [-34.5, 0], "dir": [1, 0],  "width": 4, "steps": 2, "stepH": 0.5, "stepD": 1.1, "mat": "concrete" },
+    { "type": "box", "pos": [35, 4.5], "size": [0.5, 1, 3], "y": 1.5, "mat": "metal", "mirror": "xz" },
+
+    { "comment": "모서리 벙커 (ㄱ자 벽)", "type": "box", "pos": [30, 26], "size": [9, 3.2, 0.8], "mat": "dark", "mirror": "xz" },
+    { "type": "box", "pos": [26, 30.5], "size": [0.8, 3.2, 8], "mat": "dark", "mirror": "xz" },
+    { "type": "box", "pos": [31, 30], "size": [2, 1, 2], "mat": "crate", "mirror": "xz" },
+
+    { "comment": "남북 통로 엄폐물", "type": "box", "pos": [0, 20], "size": [6, 1.7, 1.2], "mat": "dark", "mirror": "z" },
+    { "type": "box", "pos": [4.5, 21], "size": [1.6, 0.9, 1.6], "mat": "crate", "mirror": "xz" },
+    { "type": "box", "pos": [0, 33], "size": [3, 2.4, 3], "mat": "crate", "mirror": "z" },
+    { "type": "box", "pos": [2.6, 33.4], "size": [1.6, 1, 1.6], "mat": "crate", "mirror": "xz" },
+
+    { "comment": "대각선 기둥", "type": "box", "pos": [17, 17], "size": [1.8, 7, 1.8], "mat": "concrete", "mirror": "xz" },
+
+    { "comment": "동서 통로 상자", "type": "box", "pos": [20, 6], "size": [2.4, 1.6, 2.4], "mat": "crate", "mirror": "xz" },
+    { "type": "box", "pos": [22.2, 6.6], "size": [1.5, 0.9, 1.5], "mat": "crate", "mirror": "xz" },
+    { "type": "box", "pos": [27, 12], "size": [1.2, 2.6, 5], "mat": "dark", "mirror": "xz" },
+
+    { "comment": "외곽 컨테이너", "type": "box", "pos": [14, 42], "size": [7, 2.8, 2.8], "mat": "container", "mirror": "xz" },
+    { "type": "box", "pos": [42, 16], "size": [2.8, 2.8, 7], "mat": "container", "mirror": "xz" },
+    { "type": "box", "pos": [10, 28], "size": [2, 1.2, 2], "mat": "crate", "mirror": "xz" },
+    { "type": "box", "pos": [36, 38], "size": [2.2, 1.8, 2.2], "mat": "crate", "mirror": "xz" }
+  ],
+  "barrels": [
+    [12, 10], [-12, -10], [10, -12], [-10, 12],
+    [24, 24], [-24, -24], [24, -24], [-24, 24],
+    [0, 26], [0, -26], [30, 0], [-30, 0],
+    [38, 30], [-38, -30]
+  ],
+  "models": []
+}
